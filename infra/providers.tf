@@ -27,10 +27,6 @@ provider "aws" {
     sts      = var.aws_endpoint
   }
 
-  default_tags {
-    tags = {
-      managed-by = "terraform"
-      repo       = "terraform-pr-guardrails"
-    }
-  }
+  # No default_tags: Moto drops S3 bucket tags, so they would plan as a change on every
+  # run and bury the signal in each PR comment.
 }
