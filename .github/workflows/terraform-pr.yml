@@ -1,0 +1,95 @@
+name: terraform-pr
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths:
+      - "infra/**"
+      - "guard/**"
+      - "scripts/**"
+      - "tests/**"
+      - ".github/workflows/terraform-pr.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: terraform-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest discover tests -v
+
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      # pull_request checks out refs/pull/N/merge: the PR merged into the base as it is now.
+      # Its parents give a consistent base and head from the same moment.
+      - uses: actions/checkout@v4
+        with:
+          path: merge
+          fetch-depth: 2
+
+      - name: Check out base and head from the merge commit's parents
+        run: |
+          git -C merge worktree add --detach ../base HEAD^1
+          git -C merge worktree add --detach ../head HEAD^2
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.9"
+          # The wrapper echoes stdout into step outputs and prefixes it -- it corrupts
+          # `terraform show -json` when captured to a file.
+          terraform_wrapper: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Start AWS emulator
+        run: |
+          pip install --quiet 'moto[server]==5.2.3'
+          base/scripts/moto.sh start
+
+      # Run the *base* branch's pipeline and guard, so a PR cannot weaken the check that
+      # judges it. Changes to guard/ are covered by the unit job until they merge.
+      - name: Plan and evaluate
+        id: guard
+        run: |
+          set +e
+          base/scripts/pipeline.sh --base base --merge merge --head head --out out \
+            ${{ contains(github.event.pull_request.labels.*.name, 'allow-destroy') && '--allow-destroy' || '' }}
+          echo "rc=$?" >>"$GITHUB_OUTPUT"
+          cat out/comment.md >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Post or update PR comment
+        if: always() && hashFiles('out/comment.md') != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('out/comment.md', 'utf8');
+            const marker = '<!-- terraform-pr-guardrails -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const mine = comments.find(c => c.user.type === 'Bot' && c.body.startsWith(marker));
+            if (mine) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+      - name: Fail if blocked
+        if: steps.guard.outputs.rc != '0'
+        run: |
+          echo "::error::Terraform guardrails blocked this PR (see the PR comment)"
+          exit 1
