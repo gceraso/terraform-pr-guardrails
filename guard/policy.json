@@ -1,0 +1,17 @@
+{
+  "override_label": "allow-destroy",
+  "protected_types": [
+    "aws_s3_bucket",
+    "aws_dynamodb_table",
+    "aws_kms_key",
+    "aws_db_instance",
+    "aws_rds_cluster",
+    "aws_efs_file_system",
+    "aws_ebs_volume",
+    "aws_elasticache_replication_group",
+    "aws_secretsmanager_secret",
+    "aws_sqs_queue",
+    "aws_kinesis_stream",
+    "aws_opensearch_domain"
+  ]
+}

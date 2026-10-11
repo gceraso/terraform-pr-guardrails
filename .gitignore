@@ -1,0 +1,9 @@
+.venv/
+.pr-out/
+.moto.pid
+.moto.log
+**/.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+__pycache__/
