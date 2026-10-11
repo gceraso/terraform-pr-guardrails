@@ -3,12 +3,8 @@ name: terraform-pr
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
-    paths:
-      - "infra/**"
-      - "guard/**"
-      - "scripts/**"
-      - "tests/**"
-      - ".github/workflows/terraform-pr.yml"
+    # No paths filter: unit and plan are required checks on main, and a filtered-out PR
+    # (README only) would wait forever for checks that never start.
 
 permissions:
   contents: read
