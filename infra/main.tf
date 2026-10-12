@@ -5,7 +5,7 @@ module "artifacts" {
 
 module "logs" {
   source = "./modules/bucket"
-  name   = "${var.env}-access-logs"
+  name   = "${var.env}-request-logs"
 }
 
 # Indexed by position, not by name -- see demos/04-count-index-shift.
